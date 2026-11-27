@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .addon_sandbox import prepare_and_verify_blender_sandbox
-from .aes_resolver import resolve_and_verify_aes_keys
+from .aes_resolver import INVALID_KEY_NOTICE_ZH, resolve_and_verify_aes_keys
 from .asset_extractor import extract_character_assets, list_available_characters
 from .blender_runner import run_blender_assembly
 from .delivery_packager import build_handoff_and_delivery_report
@@ -108,6 +108,7 @@ class PipelineOrchestrator:
             fmodel_dir=fmodel_dir,
             fmodel_appsettings_path=fmodel_appsettings_path,
             extra_keys_file=extra_keys_file,
+            work_dir=self.work_dir,
         )
 
         if not env["wuthering_waves"]["found"]:
@@ -121,13 +122,36 @@ class PipelineOrchestrator:
                 "host_notice": env["wuthering_waves"]["message"],
             }
 
+        # If the host explicitly provided a local key file/folder and it failed validation, report immediately
+        uk_probe = env.get("user_keys_probe") or {}
+        if uk_probe.get("provided") and not uk_probe.get("ok"):
+            err_detail = uk_probe.get("error", "Invalid key file")
+            return {
+                "stage": 0,
+                "status": "FAIL",
+                "code": "HOST_KEYS_INVALID",
+                "env": env,
+                "error": err_detail,
+                "host_notice": f"{INVALID_KEY_NOTICE_ZH}（校验详情：{err_detail}）",
+            }
+
+        # Automatically link FModel (always creating .bak backup first) whenever:
+        #   (a) explicit consent_link_fmodel=True, OR
+        #   (b) host explicitly supplied a valid local keys_file path, OR
+        #   (c) local keys already exist on host (e.g. moved WW drive / local keys.json in FModel dir) and FModel just needs link repair.
+        should_link_fmodel = bool(
+            consent_link_fmodel
+            or (uk_probe.get("provided") and uk_probe.get("ok"))
+            or (env["fmodel"].get("has_local_keys_ready") and env["fmodel"].get("needs_link_repair"))
+        )
+
         bootstrap_actions: List[Dict[str, Any]] = []
-        if consent_downloads or consent_link_fmodel:
+        if consent_downloads or should_link_fmodel:
             bootstrap_actions = apply_consented_bootstrap(
                 self.project_root,
                 env,
                 consent_downloads=consent_downloads,
-                consent_link_fmodel=consent_link_fmodel,
+                consent_link_fmodel=should_link_fmodel,
                 keys_bundle_path=extra_keys_file,
                 fmodel_appsettings_path=fmodel_appsettings_path,
             )
@@ -136,7 +160,7 @@ class PipelineOrchestrator:
                 return {
                     "stage": 0,
                     "status": "FAIL",
-                    "code": "BOOTSTRAP_OR_KEY_LINK_FAILED",
+                    "code": failed_boot[0].get("code", "BOOTSTRAP_OR_KEY_LINK_FAILED"),
                     "bootstrap_actions": bootstrap_actions,
                     "host_notice": "\n".join(a.get("host_notice") or a.get("error", "") for a in failed_boot),
                     "error": failed_boot[0].get("error", "Bootstrap/link action failed"),
@@ -153,6 +177,7 @@ class PipelineOrchestrator:
                 fmodel_dir=effective_fmodel,
                 fmodel_appsettings_path=fmodel_appsettings_path,
                 extra_keys_file=extra_keys_file,
+                work_dir=self.work_dir,
             )
 
         missing_required = [c for c in env.get("consent_actions", []) if c.get("required")]
@@ -178,6 +203,32 @@ class PipelineOrchestrator:
                 "env": env,
                 "error": f"底层解析组件不可用: {env['ww_extract'].get('error') or env['ww_extract'].get('self_test')}",
             }
+
+        # Active local key usability probe right in Stage 0: fail clearly ONLY if local keys themselves are broken/expired!
+        aes_check = resolve_and_verify_aes_keys(env, self.work_dir, extra_keys_file=extra_keys_file)
+        if aes_check.get("status") == "FAIL":
+            return {
+                "stage": 0,
+                "status": "FAIL",
+                "code": aes_check.get("code", "HOST_KEYS_INVALID"),
+                "env": env,
+                "aes": aes_check,
+                "bootstrap_actions": bootstrap_actions,
+                "host_notice": aes_check.get("host_notice") or INVALID_KEY_NOTICE_ZH,
+                "error": aes_check.get("error", INVALID_KEY_NOTICE_ZH),
+            }
+        if aes_check.get("status") == "CONSENT_REQUIRED":
+            return {
+                "stage": 0,
+                "status": "CONSENT_REQUIRED",
+                "code": aes_check.get("code", "HOST_KEYS_REQUIRED"),
+                "env": env,
+                "aes": aes_check,
+                "bootstrap_actions": bootstrap_actions,
+                "host_notice": aes_check.get("host_notice", ""),
+            }
+        if aes_check.get("host_notice"):
+            host_notices.append(aes_check["host_notice"])
 
         sandbox_root = self.work_dir / "sandbox_blender"
         sandbox = prepare_and_verify_blender_sandbox(env["blender"], env["addons"], sandbox_root)
@@ -206,6 +257,8 @@ class PipelineOrchestrator:
             "status": final_status,
             "env": env,
             "sandbox": sandbox,
+            "aes_check": aes_check.get("aes"),
+            "host_keys_file": str(Path(extra_keys_file).resolve()) if extra_keys_file and Path(extra_keys_file).exists() else None,
             "self_audit": self_audit_res,
             "bootstrap_actions": bootstrap_actions,
         }
@@ -216,11 +269,12 @@ class PipelineOrchestrator:
             "status": final_status,
             "env": env,
             "sandbox": sandbox,
+            "aes": aes_check.get("aes"),
             "self_audit": self_audit_res,
             "bootstrap_actions": bootstrap_actions,
             "optional_consent_actions": optional_consents,
             "host_notice": "\n".join(host_notices),
-            "next_prompt_for_user": "宿主机环境、本地 FModel 关联校验与 Blender 隔离沙盒冒烟测试已全部通过。请输入需要在 Blender 中进行风格化动作展示的《鸣潮》正式服已实装自机角色名称（支持中文、英文名、拼音或 ModelId）：",
+            "next_prompt_for_user": "宿主机环境、本地 FModel 密钥挂载校验与 Blender 隔离沙盒冒烟测试已全部通过。请输入需要在 Blender 中进行风格化动作展示的《鸣潮》正式服已实装自机角色名称（支持中文、英文名、拼音或 ModelId）：",
         }
 
     def run_list_characters(
@@ -234,16 +288,17 @@ class PipelineOrchestrator:
         s0 = state.get("stage_0")
         if not s0 or s0.get("status") not in ("PASS", "PATCHED"):
             return {"status": "FAIL", "error": "Must run Stage 0 preflight first."}
+        effective_keys = extra_keys_file or (None if ignore_fmodel_keys else s0.get("host_keys_file"))
         aes = resolve_and_verify_aes_keys(
             s0["env"],
             self.work_dir,
-            extra_keys_file=extra_keys_file,
+            extra_keys_file=effective_keys,
             ignore_fmodel_keys=ignore_fmodel_keys,
         )
         if aes["status"] == "CONSENT_REQUIRED":
             return {"status": "CONSENT_REQUIRED", "code": aes.get("code", "HOST_KEYS_REQUIRED"), "aes": aes, "host_notice": aes.get("host_notice", "")}
         if aes["status"] == "FAIL":
-            return {"status": "FAIL", "aes": aes, "host_notice": aes.get("host_notice", "")}
+            return {"status": "FAIL", "code": aes.get("code", "HOST_KEYS_INVALID"), "aes": aes, "host_notice": aes.get("host_notice", "")}
         try:
             listing = list_available_characters(s0["env"], aes["key_files"], query=query, work_dir=self.work_dir)
         finally:
@@ -272,10 +327,11 @@ class PipelineOrchestrator:
         if not s0 or s0.get("status") not in ("PASS", "PATCHED"):
             return {"stage": 1, "status": "FAIL", "error": "Stage 0 Preflight has not passed. Run --step 0 first."}
 
+        effective_keys = extra_keys_file or (None if ignore_fmodel_keys else s0.get("host_keys_file"))
         aes = resolve_and_verify_aes_keys(
             s0["env"],
             self.work_dir,
-            extra_keys_file=extra_keys_file,
+            extra_keys_file=effective_keys,
             ignore_fmodel_keys=ignore_fmodel_keys,
         )
         if aes["status"] == "CONSENT_REQUIRED":
@@ -291,7 +347,7 @@ class PipelineOrchestrator:
             return {
                 "stage": 1,
                 "status": "FAIL",
-                "code": "AES_RESOLUTION_FAILED",
+                "code": aes.get("code", "HOST_KEYS_INVALID"),
                 "aes": aes,
                 "host_notice": aes.get("host_notice", ""),
                 "error": aes.get("error", "Local AES key verification failed"),

@@ -25,7 +25,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .aes_resolver import load_user_key_bundle_file
+from .aes_resolver import INVALID_KEY_NOTICE_ZH, load_user_key_bundle_file, validate_aes_key_bundle
 from .env_detector import WUTHERING_WAVES_UE_VERSION_INT
 
 BLENDER_DOWNLOAD_SPEC = {
@@ -115,7 +115,7 @@ def sha256_file(path: Path) -> str:
 def _download_file(url: str, dest: Path, timeout_s: int = 120) -> Path:
     _validate_https_url(url)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(url, headers={"User-Agent": "ww-auto-model-extractor/0.1.1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "ww-auto-model-extractor/0.1.2"})
     tmp = dest.with_suffix(dest.suffix + ".part")
     with urllib.request.urlopen(req, timeout=timeout_s) as resp, tmp.open("wb") as out:
         shutil.copyfileobj(resp, out, length=1024 * 256)
@@ -125,7 +125,7 @@ def _download_file(url: str, dest: Path, timeout_s: int = 120) -> Path:
 
 def _fetch_text(url: str, timeout_s: int = 30) -> str:
     _validate_https_url(url)
-    req = urllib.request.Request(url, headers={"User-Agent": "ww-auto-model-extractor/0.1.1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "ww-auto-model-extractor/0.1.2"})
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         raw = resp.read(_MAX_TEXT_RESPONSE_BYTES + 1)
         if len(raw) > _MAX_TEXT_RESPONSE_BYTES:
@@ -334,9 +334,10 @@ def link_fmodel_to_wuthering_waves(
         if not loaded.get("ok"):
             return {
                 "status": "FAIL",
+                "code": "HOST_KEYS_INVALID",
                 "component": "fmodel_link",
                 "error": loaded.get("error", "Invalid key file/package"),
-                "host_notice": f"[密钥文件包校验失败] {loaded.get('error')}。未修改本地 FModel 配置。",
+                "host_notice": f"{INVALID_KEY_NOTICE_ZH}（校验详情：{loaded.get('error')}，未修改本地 FModel 配置。）",
             }
         parsed_keys = loaded
 
@@ -356,6 +357,23 @@ def link_fmodel_to_wuthering_waves(
     if not isinstance(per_dir, dict):
         per_dir = {}
         cfg["PerDirectory"] = per_dir
+
+    # If no explicit bundle was passed, reuse valid WW AesKeys already present in another PerDirectory entry (e.g. moved drive)
+    if parsed_keys is None and per_dir:
+        for old_k, old_v in per_dir.items():
+            if not isinstance(old_v, dict):
+                continue
+            is_ww_old = (
+                old_v.get("UeVersion") == WUTHERING_WAVES_UE_VERSION_INT
+                or str(old_v.get("UeVersion", "")).upper() == "GAME_WUTHERINGWAVES"
+                or "wuthering" in str(old_k).lower()
+                or "wuthering" in str(old_v.get("GameName", "")).lower()
+            )
+            if is_ww_old:
+                val_old = validate_aes_key_bundle(old_v.get("AesKeys") or old_v.get("aesKeys") or {})
+                if val_old.get("valid"):
+                    parsed_keys = {"ok": True, **val_old}
+                    break
 
     # Reuse existing entry matching ww_content_dir case-insensitively if present
     matched_key = ww_content_dir
@@ -459,12 +477,17 @@ def apply_consented_bootstrap(
         or env_report["fmodel"].get("aes_key_count", 0) == 0
         or bool(keys_bundle_path)
     ):
+        fallback_local_key = keys_bundle_path
+        if not fallback_local_key:
+            det_local = env_report["fmodel"].get("detected_local_key_files") or []
+            if det_local:
+                fallback_local_key = det_local[0]
         actions_done.append(
             link_fmodel_to_wuthering_waves(
                 env_report["wuthering_waves"],
                 consent_granted=True,
                 appsettings_path=fmodel_appsettings_path,
-                keys_bundle_path=keys_bundle_path,
+                keys_bundle_path=fallback_local_key,
             )
         )
 

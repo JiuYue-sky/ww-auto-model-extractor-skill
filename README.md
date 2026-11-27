@@ -2,7 +2,7 @@
 
 **面向本机合法《鸣潮》（Wuthering Waves）正式服已实装自机角色的风格化贴图审计、隔离 Blender 沙盒卡渲与动作表情展示及标准化 UE 交接包工作流（通用 Agent 包体 + 标准 `SKILL.md` 双形态）**
 
-![Version](https://img.shields.io/badge/version-v0.1.1-blue)
+![Version](https://img.shields.io/badge/version-v0.1.2-blue)
 ![Unofficial](https://img.shields.io/badge/status-Unofficial_Research_Tool-orange)
 ![License](https://img.shields.io/badge/license-MIT_(Original_Code)-green)
 ![Platform](https://img.shields.io/badge/platform-Windows_10%2F11_x64-0078D6)
@@ -12,7 +12,7 @@
 > [!WARNING]
 > **非官方项目声明与合规红线（Unofficial Notice & Compliance Boundaries）**
 > - **非官方性质**：本项目为非官方第三方 3D 渲染与动画管线研究工具，与**广州库洛科技有限公司（Kuro Games）**无任何官方关联、合作、授权或背书。
-> - **零资产 / 零密钥 / 零自动寻钥**：本仓库**不分发任何游戏原始资产、不内嵌专有商业 Oodle 动态库、不内置任何 AES 密钥，亦不提供自动联网寻钥功能**（当检测到本地 FModel 未关联或缺少有效密钥时，程序自动暂停并提示宿主机提供本地自备的 `.json` / `.zip` 密钥文件包，经授权并自动备份原 `AppSettings.json` 后代为完成本地关联）。
+> - **零资产 / 零密钥 / 零自动寻钥**：本仓库与插件**不分发任何游戏原始资产、不内嵌专有商业 Oodle 动态库、不内置不提供任何 AES 密钥，亦不代为联网搜索密钥**。如宿主机尚未准备本地密钥，可**先临时关闭本插件并另开新会话执行，或由宿主机手动寻找**；当检索到本机已有本地密钥配置或宿主机直接提供本地路径（`.json` / `.zip` / `.txt` 或目录）时，插件不询问来源，自动备份原 `AppSettings.json` 后直接完成本地 FModel 关联并使用，仅在密钥本身无效或过期时提示「密钥本身存在问题，请使用正确可用的密钥」。
 > - **严禁商用、交易与测试服泄密**：严格仅限个人针对**正式服已公开实装角色**进行离线渲染与骨骼动画学习研究；**严禁用于任何测试服（Beta）拆包泄密、商业变现、有偿代做、公开资产分发、私下买卖交易或不良二创（NSFW）**。完整条款见文末及 [`NOTICE.md`](NOTICE.md)、[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)。
 
 > [!IMPORTANT]
@@ -42,7 +42,7 @@
 | :--- | :--- | :---: | :--- |
 | **操作系统** | Windows 10 / 11 (x64) | **必需** | 支持国服、国际服、Steam、Epic、WeGame 与自定义安装目录探测 |
 | **《鸣潮》正式服客户端** | 本地官方正版正式服客户端 | **必需（硬门禁）** | 缺失时立即报错终止（`FATAL_MISSING_WUTHERING_WAVES`），**严禁自动下载游戏** |
-| **本地 FModel 密钥关联** | 宿主机本地 FModel 配置或自备 `.json`/`.zip` 包 | **缺失时暂停** | **本仓库不含密钥且不联网寻钥**；缺密钥/未关联时自动暂停，由宿主机提供本地密钥包并授权后自动备份关联至本地 FModel |
+| **本地 FModel 密钥关联** | 宿主机本地 FModel 配置或自备 `.json`/`.zip`/`.txt`/目录 | **自动复用 / 缺失时暂停** | **本仓库不提供且不搜索密钥**（未准备时可先关闭本插件另开会话执行或手动寻找）；检测到本机已有配置或提供本地路径时不询问来源、自动备份并直接关联使用，仅在密钥本身不可用时报错提醒 |
 | **Blender** | `3.6 LTS` / `4.2 LTS` / `5.x`（实测 `5.2.3 LTS`） | **必需** | 缺失时返回 `CONSENT_REQUIRED`，仅在宿主机明确同意后下载官方便携版至隔离 `runtime/` |
 | **解码运行库 (Oodle)** | 自动复用本机 FModel/UE 或授权按需下载 | **按需授权** | 开源包不随包分发闭源 Oodle DLL；裸机首次运行在征得宿主机同意后下载至 `runtime/native/` |
 | **Python** | `3.10+`（或复用 Blender 内置 Python） | **必需** | 核心引擎仅用标准库 + Blender 内置 `OpenImageIO`/`numpy`，**零额外 `pip install`** |

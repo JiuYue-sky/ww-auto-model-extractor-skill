@@ -523,6 +523,7 @@ def detect_fmodel(
     appsettings_path, cfg = _read_fmodel_appsettings(appsettings_override)
     linked_to_ww = False
     aes_key_count = 0
+    any_ww_aes_key_count = 0
     matched_per_dir_key: Optional[str] = None
 
     def _canon_dir_str(raw_p: Any) -> str:
@@ -537,7 +538,36 @@ def detect_fmodel(
             pass
         return s.lower().rstrip("\\/")
 
-    ww_client_norm = _canon_dir_str(ww_info.get("client_dir", "")) if (ww_info and ww_info.get("found")) else ""
+    def _paths_overlap_ww(cand_norm: str, roots: List[str]) -> bool:
+        if not cand_norm:
+            return False
+        for r in roots:
+            if not r:
+                continue
+            if (
+                cand_norm == r
+                or cand_norm.startswith(r + "\\")
+                or cand_norm.startswith(r + "/")
+                or r.startswith(cand_norm + "\\")
+                or r.startswith(cand_norm + "/")
+            ):
+                return True
+        return False
+
+    def _count_valid_aes_keys(aes_obj: Any) -> int:
+        from .aes_resolver import validate_aes_key_bundle
+
+        if not isinstance(aes_obj, dict):
+            return 0
+        v = validate_aes_key_bundle(aes_obj)
+        return int(v.get("total_keys", 0)) if v.get("valid") else 0
+
+    ww_roots: List[str] = []
+    if ww_info and ww_info.get("found"):
+        for k in ("game_root", "client_dir", "content_dir", "paks_dir"):
+            cn = _canon_dir_str(ww_info.get(k, ""))
+            if cn and cn not in ww_roots:
+                ww_roots.append(cn)
 
     if isinstance(cfg, dict):
         per_dir = cfg.get("PerDirectory")
@@ -547,20 +577,22 @@ def detect_fmodel(
                     continue
                 dk_norm = _canon_dir_str(dir_key)
                 gd_norm = _canon_dir_str(entry.get("GameDirectory", ""))
-                is_ww_ver = entry.get("UeVersion") == WUTHERING_WAVES_UE_VERSION_INT
-                matches_local = bool(
-                    ww_client_norm and (dk_norm.startswith(ww_client_norm) or gd_norm.startswith(ww_client_norm))
+                ue_ver = entry.get("UeVersion")
+                gname = str(entry.get("GameName", "")).lower()
+                is_ww_ver = (
+                    ue_ver == WUTHERING_WAVES_UE_VERSION_INT
+                    or str(ue_ver or "").upper() == "GAME_WUTHERINGWAVES"
+                    or "wuthering" in gname
+                    or "鸣潮" in gname
                 )
-                if is_ww_ver and (matches_local or not ww_client_norm):
+                matches_local = bool(ww_roots and (_paths_overlap_ww(dk_norm, ww_roots) or _paths_overlap_ww(gd_norm, ww_roots)))
+                cnt = _count_valid_aes_keys(entry.get("AesKeys") or entry.get("aesKeys"))
+                if is_ww_ver or matches_local:
+                    any_ww_aes_key_count = max(any_ww_aes_key_count, cnt)
+                if (is_ww_ver or cnt > 0) and (matches_local or not ww_roots):
                     linked_to_ww = True
                     matched_per_dir_key = str(dir_key)
-                    aes_obj = entry.get("AesKeys")
-                    if isinstance(aes_obj, dict):
-                        cnt = 1 if aes_obj.get("mainKey") else 0
-                        dks = aes_obj.get("dynamicKeys")
-                        if isinstance(dks, list):
-                            cnt += len(dks)
-                        aes_key_count = max(aes_key_count, cnt)
+                    aes_key_count = max(aes_key_count, cnt)
 
     fmodel_data_dir: Optional[Path] = None
     if fmodel_exe:
@@ -572,6 +604,33 @@ def detect_fmodel(
         if cand_appdata.is_dir():
             fmodel_data_dir = cand_appdata
 
+    # Detect existing local key files in standard FModel locations (never scans random user folders or network)
+    detected_local_key_files: List[str] = []
+    if appsettings_override is None:
+        from .aes_resolver import load_user_key_bundle_file
+
+        local_cand_files: List[Path] = []
+        if appsettings_path and appsettings_path.is_file():
+            local_cand_files.extend([appsettings_path.parent / "keys.json", appsettings_path.parent / "Output" / ".data" / "keys.json"])
+        if fmodel_exe:
+            local_cand_files.extend([fmodel_exe.parent / "AppSettings.json", fmodel_exe.parent / "keys.json", fmodel_exe.parent / "Output" / ".data" / "keys.json"])
+        local_app = os.environ.get("LOCALAPPDATA")
+        if local_app:
+            local_cand_files.extend([Path(local_app) / "FModel" / "AppSettings.json", Path(local_app) / "FModel" / "keys.json"])
+        seen_lkf: set[str] = set()
+        for cf in local_cand_files:
+            if not cf.is_file():
+                continue
+            rs = str(cf.resolve())
+            if rs.lower() in seen_lkf or (appsettings_path and rs.lower() == str(appsettings_path.resolve()).lower()):
+                continue
+            seen_lkf.add(rs.lower())
+            if load_user_key_bundle_file(cf).get("ok"):
+                detected_local_key_files.append(rs)
+
+    effective_aes_count = max(aes_key_count, any_ww_aes_key_count)
+    has_local_keys_ready = effective_aes_count > 0 or len(detected_local_key_files) > 0
+
     return {
         "found": fmodel_exe is not None,
         "source": fmodel_source,
@@ -582,6 +641,9 @@ def detect_fmodel(
         "linked_to_local_ww": linked_to_ww,
         "matched_per_dir_key": matched_per_dir_key,
         "aes_key_count": aes_key_count,
+        "any_ww_aes_key_count": any_ww_aes_key_count,
+        "detected_local_key_files": detected_local_key_files,
+        "has_local_keys_ready": has_local_keys_ready,
         "needs_link_repair": bool(ww_info and ww_info.get("found") and not linked_to_ww),
         "consent_download_supported": True,
     }
@@ -756,8 +818,9 @@ def detect_full_environment(
     fmodel_dir: Optional[str | Path] = None,
     fmodel_appsettings_path: Optional[Path] = None,
     extra_keys_file: Optional[str | Path] = None,
+    work_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Run complete Stage 0 environment inventory (pauses when FModel is unlinked or lacks local keys)."""
+    """Run complete Stage 0 environment inventory (directly uses existing local keys; pauses only when no local keys exist)."""
     from .aes_resolver import load_user_key_bundle_file
 
     ww = detect_wuthering_waves(game_dir)
@@ -767,9 +830,16 @@ def detect_full_environment(
     ww_extract = detect_ww_extract(project_root, fmodel, ue_optional)
     addons = detect_blender_addons(blender, project_root)
 
-    user_keys_valid = False
+    if work_dir and (work_dir / "keys.json").is_file():
+        wd_k = str((work_dir / "keys.json").resolve())
+        if wd_k not in fmodel["detected_local_key_files"] and load_user_key_bundle_file(wd_k).get("ok"):
+            fmodel["detected_local_key_files"].append(wd_k)
+            fmodel["has_local_keys_ready"] = True
+
+    user_keys_probe: Dict[str, Any] = {"provided": bool(extra_keys_file), "ok": False}
     if extra_keys_file:
-        user_keys_valid = bool(load_user_key_bundle_file(extra_keys_file).get("ok"))
+        user_keys_probe = {"provided": True, **load_user_key_bundle_file(extra_keys_file)}
+    user_keys_valid = bool(user_keys_probe.get("ok"))
 
     consent_actions: List[Dict[str, Any]] = []
     if ww["found"]:
@@ -808,7 +878,8 @@ def detect_full_environment(
                     ),
                 }
             )
-        if (fmodel["needs_link_repair"] or fmodel.get("aes_key_count", 0) == 0) and not user_keys_valid:
+        # Only pause for keys when NO valid local key exists anywhere on host and none was validly supplied
+        if (not fmodel.get("has_local_keys_ready")) and (not user_keys_valid):
             target_cfg_str = str(
                 fmodel_appsettings_path
                 or fmodel.get("appsettings_path")
@@ -817,18 +888,19 @@ def detect_full_environment(
             consent_actions.append(
                 {
                     "action_id": "provide_keys_and_link_fmodel",
-                    "flag": "--keys-file \"<本地 .json 或 .zip 密钥包路径>\" --consent-link-fmodel",
+                    "flag": "--keys-file \"<本地 .json / .zip / .txt 或目录路径>\" --consent-link-fmodel",
                     "required": True,
                     "download_plan": {
                         "appsettings_path": target_cfg_str,
                         "ww_content_dir": ww.get("content_dir"),
                         "backup_before_write": True,
-                        "accepted_key_formats": [".json", ".zip (in-memory JSON read only)"],
+                        "accepted_key_formats": [".json", ".zip (in-memory read only)", ".txt/.key", "local folder containing keys.json"],
                     },
                     "reason": (
-                        "检测到本机 FModel 尚未关联《鸣潮》目录或缺少有效的本地密钥配置（AesKeys），工作已暂停。"
-                        "本开源工具不内置亦不联网获取任何密钥；请由宿主机提供本地自备的密钥文件或压缩包路径（支持 .json 或含 keys.json 的 .zip），"
-                        "并确认同意后传入 `--keys-file \"<本地路径>\" --consent-link-fmodel`，程序将在自动备份原 AppSettings.json 后为你完成本地关联。"
+                        "检测到本机 FModel 尚未关联《鸣潮》目录或未发现可用的本地密钥配置，工作已暂停。"
+                        "本插件不提供、亦不代为联网搜索密钥；如尚未准备，可先临时关闭本插件并另开新会话执行，或由宿主机手动寻找并准备好本地密钥文件。"
+                        "如本机已有现成密钥文件/压缩包/目录，请直接传入 `--keys-file \"<本地路径>\" --consent-link-fmodel`，"
+                        "插件将不询问来源，自动备份原 AppSettings.json 后直接完成本地 FModel 关联并使用。"
                     ),
                 }
             )
@@ -852,6 +924,7 @@ def detect_full_environment(
         "fmodel": fmodel,
         "ww_extract": ww_extract,
         "addons": addons,
+        "user_keys_probe": user_keys_probe,
         "unreal_engine_optional": ue_optional,
         "consent_actions": consent_actions,
     }

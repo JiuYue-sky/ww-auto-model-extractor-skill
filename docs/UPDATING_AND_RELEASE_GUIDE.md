@@ -12,13 +12,13 @@
 
 ### 1. DeepSeek Harness (DSH) 插件版更新方式
 - **渠道 1（DSH 插件市场 / npm）**：在 DSH 客户端「插件管理」页面点击**「更新」**，或执行 `dsh plugin update dsh-ww-auto-model-extractor`。
-- **渠道 2（GitHub Releases `.tgz` 直装）**：运行 `dsh plugin add https://github.com/JiuYue-sky/dsh-ww-auto-model-extractor/releases/download/v0.1.1/dsh-ww-auto-model-extractor-0.1.1.tgz`。
+- **渠道 2（GitHub Releases `.tgz` 直装）**：运行 `dsh plugin add https://github.com/JiuYue-sky/dsh-ww-auto-model-extractor/releases/download/v0.1.2/dsh-ww-auto-model-extractor-0.1.2.tgz`。
 - **渠道 3（本地离线 `file:` 快照刷新）**：在 `~/.dsh/profiles/desktop` 重新执行 `pnpm add file:<插件目录> --prefer-offline --ignore-scripts` 并重启 DSH 客户端。
-- **验收**：调用 `dsh_ww_self_audit` 确认 `core_version` 已变为新版（如 `0.1.1`）且 `status == "PASS"`。
+- **验收**：调用 `dsh_ww_self_audit` 确认 `core_version` 已变为新版（如 `0.1.2`）且 `status == "PASS"`。
 
 ### 2. 通用包体 / 标准 `Skill` 版更新方式
 1. 运行时建议始终通过 `--work-dir "D:\WW_Outputs"` 将产出工程放在包体目录外部；若之前已授权下载便携版 Blender 或 Oodle 运行库至包内 `runtime/`，覆盖升级前保留 `runtime/` 目录即可避免重复下载。
-2. 解压新版 `ww-auto-model-extractor-skill-v0.1.1.zip`（核对 `.sha256`）替换原 `skills/ww-auto-model-extractor/` 目录，运行 `python orchestrator.py --self-audit` 确认全部检查项为 `PASS`。
+2. 解压新版 `ww-auto-model-extractor-skill-v0.1.2.zip`（核对 `.sha256`）替换原 `skills/ww-auto-model-extractor/` 目录，运行 `python orchestrator.py --self-audit` 确认全部检查项为 `PASS`。
 
 ---
 

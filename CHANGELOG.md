@@ -5,6 +5,27 @@
 
 ---
 
+## [0.1.2] - 2026-11-27
+
+### 中文更新说明（本地 FModel 自动关联修复与防过度回避优化）
+- **明确缺密钥时的用户操作指引**：在正式文档与暂停提示中明确写明——本插件本身不提供、也不代为搜索密钥，如宿主机尚未准备好密钥，可**先临时关闭本插件并另开新会话执行，或由宿主机手动寻找并准备好本地密钥文件**。
+- **修复本机已有密钥/FModel 自动关联被过度回避与误判问题**：
+  - 放宽 `detect_fmodel()` 路径与版本识别：同时兼容 FModel 指向游戏根目录（`Wuthering Waves Game`）、`Client`、`Client/Content`、`Paks` 以及字符串枚举 `UeVersion: "GAME_WutheringWaves"`，并自动过滤全零占位符；
+  - 升级 `--keys-file` 引擎支持直接传入 **`.json`、`.zip`（内存只读）、`.txt`/`.key` 单密钥文件或包含密钥文件的本地目录**（直接跳过目录内的 `README.md` 等说明文档），无需宿主 Agent 手动翻查目录；
+  - 检索到本机已有本地密钥配置或宿主机直接提供本地路径时，**不再询问来源、不再过度回避**，自动创建 `AppSettings.json.bak` 备份并直接完成本地 FModel 关联与挂载验证；
+  - 仅在密钥本身格式有误、无效或随版本过期无法挂载当前客户端时，明确返回 `HOST_KEYS_INVALID` 并提示：**「密钥本身存在问题，请使用正确可用的密钥」**。
+- **标题搜索权重优化**：在项目标题与仓库简介的《鸣潮》后统一补齐 `（Wuthering Waves）`，并移除标题括号内的密钥提醒（仅保留在正式文档正文中）。
+
+### English Release Notes (Local FModel Auto-Link Fix & Anti-Over-Refusal Hardening)
+- **Clearer Missing-Key Guidance**: Documented explicitly in official docs and pause prompts that the tool does not supply or search for keys, and hosts without local keys may temporarily disable the plugin and open a new session or locate a local key file manually.
+- **Seamless Local FModel Auto-Link & Usability Fixes**:
+  - Fixed `detect_fmodel()` to match FModel entries pointing at `game_root`, `Client`, `Client/Content`, or `Paks`, as well as string enum `UeVersion: "GAME_WutheringWaves"`, while rejecting all-zero placeholder keys.
+  - Extended `--keys-file` to directly accept `.json`, `.zip` (in-memory only), plain `.txt`/`.key` single-key files, or a local directory containing key files (ignoring unrelated `README.md` / markdown files).
+  - Updated `SKILL.md` / SOP rules so existing local configs or host-supplied paths are used and linked to local FModel directly (with `.bak` backup) without interrogating file provenance; only invalid or expired keys raise `HOST_KEYS_INVALID` with `"密钥本身存在问题，请使用正确可用的密钥"`.
+- **Title & Search Discoverability**: Added `(Wuthering Waves)` after `《鸣潮》` in repository/doc titles and moved key policy details cleanly out of title parentheses into the formal documentation body.
+
+---
+
 ## [0.1.1] - 2026-11-27
 
 ### 中文更新说明（开源合规加固与展示定位升级）

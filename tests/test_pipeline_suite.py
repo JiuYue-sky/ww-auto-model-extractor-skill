@@ -126,10 +126,60 @@ class TestSafetyAndConsentPolicies(unittest.TestCase):
             self.assertEqual(entry["AesKeys"]["mainKey"], "0x" + "AB" * 32)
             self.assertEqual(len(entry["AesKeys"]["dynamicKeys"]), 1)
 
-            # Verify detect_fmodel now recognizes both link and imported AesKeys!
-            fm_det = detect_fmodel(ww_info, appsettings_override=app_settings)
+            # Verify detect_fmodel recognizes linked WW across game_root, Client/Content, and string UeVersion
+            ww_info_with_root = {
+                "found": True,
+                "game_root": str(fake_ww_root),
+                "client_dir": str(fake_ww_root / "Client"),
+                "content_dir": str(fake_ww_content),
+                "paks_dir": str(fake_ww_content / "Paks"),
+            }
+            fm_det = detect_fmodel(ww_info_with_root, appsettings_override=app_settings)
             self.assertTrue(fm_det["linked_to_local_ww"])
             self.assertEqual(fm_det["aes_key_count"], 2)
+            self.assertTrue(fm_det["has_local_keys_ready"])
+
+            # Verify detect_fmodel also matches FModel configured with game_root + string "GAME_WutheringWaves"
+            root_settings = td_p / "AppSettings_root.json"
+            root_settings.write_text(
+                json.dumps(
+                    {
+                        "PerDirectory": {
+                            str(fake_ww_root.resolve()): {
+                                "GameDirectory": str(fake_ww_root.resolve()),
+                                "UeVersion": "GAME_WutheringWaves",
+                                "AesKeys": {"mainKey": "0x" + "EF" * 32, "dynamicKeys": []},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fm_root = detect_fmodel(ww_info_with_root, appsettings_override=root_settings)
+            self.assertTrue(fm_root["linked_to_local_ww"])
+            self.assertEqual(fm_root["aes_key_count"], 1)
+
+            # Verify directory containing README.md + keys.json ignores README.md and loads keys.json directly
+            key_dir = td_p / "host_key_folder"
+            key_dir.mkdir()
+            (key_dir / "README.md").write_text("unrelated notes\n", encoding="utf-8")
+            (key_dir / "keys.json").write_text(json.dumps(sample_keys), encoding="utf-8")
+            loaded_dir = load_user_key_bundle_file(key_dir)
+            self.assertTrue(loaded_dir["ok"])
+            self.assertEqual(loaded_dir["total_keys"], 2)
+
+            # Verify plain .txt single-key file (e.g. wwkey.txt) loads directly
+            txt_key = td_p / "wwkey.txt"
+            txt_key.write_text("0x" + "55" * 32 + "\n", encoding="utf-8")
+            loaded_txt = load_user_key_bundle_file(txt_key)
+            self.assertTrue(loaded_txt["ok"])
+            self.assertEqual(loaded_txt["source_type"], "text_file")
+            self.assertEqual(loaded_txt["total_keys"], 1)
+
+            # Verify all-zero placeholder key is rejected as unusable
+            zero_txt = td_p / "zero_key.txt"
+            zero_txt.write_text("0x" + "00" * 32 + "\n", encoding="utf-8")
+            self.assertFalse(load_user_key_bundle_file(zero_txt)["ok"])
 
 
 class TestBlenderAddonASTCompat(unittest.TestCase):
@@ -190,7 +240,7 @@ class TestAesLocalOnlyAndWatchdog(unittest.TestCase):
                 'import json; print(json.dumps({"ok": True, "aes": {"status": "FAILED", "mounted_paks": 0, "total_paks": 10, "missing_guids": ["G1"]}}))\n',
                 encoding="utf-8",
             )
-            # Missing explicit --keys-file fails cleanly before probing
+            # Missing explicit --keys-file fails cleanly with HOST_KEYS_INVALID & clear Chinese guidance
             fake_env = {
                 "wuthering_waves": {"found": True, "game_root": str(td_p), "client_version": "3.8.0", "pak_counts": {"total": 10}},
                 "ww_extract": {"ok": True, "executable": sys.executable},
@@ -198,9 +248,12 @@ class TestAesLocalOnlyAndWatchdog(unittest.TestCase):
             }
             r_missing = resolve_and_verify_aes_keys(fake_env, td_p, extra_keys_file=td_p / "no_such_keys.json")
             self.assertEqual(r_missing["status"], "FAIL")
-            self.assertIn("keys.json", r_missing["host_notice"])
+            self.assertEqual(r_missing["code"], "HOST_KEYS_INVALID")
+            self.assertIn("密钥本身存在问题，请使用正确可用的密钥", r_missing["host_notice"])
 
-            # Mock _probe_paks returning 0 mounted -> verifies pause-and-link reminder & zero remote fetch!
+            # Mock _probe_paks returning 0 mounted:
+            #  (a) with NO local keys -> CONSENT_REQUIRED + disable-plugin/manual reminder
+            #  (b) WITH existing/provided local keys -> FAIL / HOST_KEYS_INVALID ("密钥本身存在问题，请使用正确可用的密钥")
             import core.aes_resolver as ar
 
             orig_probe = ar._probe_paks
@@ -213,8 +266,15 @@ class TestAesLocalOnlyAndWatchdog(unittest.TestCase):
                 self.assertEqual(r_zero["status"], "CONSENT_REQUIRED")
                 self.assertEqual(r_zero["code"], "HOST_KEYS_REQUIRED")
                 self.assertFalse(r_zero["remote_refreshed"])
+                self.assertIn("关闭本插件", r_zero["host_notice"])
                 self.assertIn("--keys-file", r_zero["host_notice"])
-                self.assertIn("--consent-link-fmodel", r_zero["host_notice"])
+
+                bad_usable_key = td_p / "stale_keys.json"
+                bad_usable_key.write_text(json.dumps(valid_payload), encoding="utf-8")
+                r_invalid = resolve_and_verify_aes_keys(fake_env, td_p, extra_keys_file=bad_usable_key, ignore_fmodel_keys=True)
+                self.assertEqual(r_invalid["status"], "FAIL")
+                self.assertEqual(r_invalid["code"], "HOST_KEYS_INVALID")
+                self.assertIn("密钥本身存在问题，请使用正确可用的密钥", r_invalid["host_notice"])
             finally:
                 ar._probe_paks = orig_probe
 

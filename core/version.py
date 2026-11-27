@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-CORE_VERSION = "0.1.1"
+CORE_VERSION = "0.1.2"
 PIPELINE_SCHEMA_VERSION = "0.1.0"
 HANDOFF_SCHEMA_VERSION = "0.1.0"
 DSH_PLUGIN_NAME = "dsh-ww-auto-model-extractor"

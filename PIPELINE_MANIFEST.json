@@ -1,7 +1,7 @@
 {
-  "manifest_version": "0.1.1",
+  "manifest_version": "0.1.2",
   "project_name": "ww-auto-model-extractor-skill",
-  "core_version": "0.1.1",
+  "core_version": "0.1.2",
   "handoff_schema_version": "0.1.0",
   "description": "[非官方]《鸣潮》（Wuthering Waves）正式服已实装自机角色风格化贴图审计、隔离 Blender 沙盒卡通渲染与游戏内动作表情展示及标准化 UE 交接包管线（通用 Agent 包体 + 标准 SKILL.md 双形态，无需本机安装 Unreal Engine）。",
   "entrypoint": "orchestrator.py",
@@ -56,7 +56,8 @@
       "verify_gate": "VerifyGate 0 (Self-Audit + Local WW Official Client Hard Gate + Local FModel Link & Key Check + Blender/Oodle Detection or Consent Bootstrap + Isolated Sandbox Smoke Test)",
       "statuses": ["PASS", "PATCHED", "CONSENT_REQUIRED", "FAIL"],
       "on_patched": "Display host_notice clearly to host user before continuing.",
-      "on_consent_required": "Pause immediately and present consent_actions to host user (e.g. ask host to provide local .json/.zip key package and consent to link FModel via --keys-file + --consent-link-fmodel, or consent to --consent-download blender,oodle).",
+      "on_consent_required": "Pause and present consent_actions (if missing keys, inform host plugin does not provide/search keys so host may disable plugin & open a new session or locate keys manually, OR pass an existing local .json/.zip/.txt/folder path directly via --keys-file without questioning origin).",
+      "on_invalid_keys": "If HOST_KEYS_INVALID is returned, inform host clearly: 密钥本身存在问题，请使用正确可用的密钥.",
       "on_missing_game": "Abort immediately without attempting to download Wuthering Waves."
     },
     {

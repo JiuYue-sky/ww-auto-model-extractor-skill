@@ -50,7 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--game-dir", type=str, default="", help="Optional override for local official Wuthering Waves install path")
     p.add_argument("--blender", type=str, default="", help="Optional override for Blender executable path")
     p.add_argument("--fmodel-dir", type=str, default="", help="Optional override for FModel directory")
-    p.add_argument("--keys-file", type=str, default="", help="Host-provided local .json or .zip key package path (used with --consent-link-fmodel to link FModel)")
+    p.add_argument(
+        "--keys-file",
+        type=str,
+        default="",
+        help="Host-provided local key path (.json, .zip, .txt/.key, or folder containing keys.json; directly validated and linked to local FModel)",
+    )
 
     p.add_argument("--no-anims", action="store_true", help="Skip animation assembly (default includes in-game animations)")
     p.add_argument("--max-anims", type=int, default=6, help="Max animations per character (default: 6)")
