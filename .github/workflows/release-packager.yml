@@ -1,0 +1,42 @@
+name: Release Packager (Agent Skill)
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "skill-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate Manifest, SOP & Skill Consistency
+        run: python -c "import json; from pathlib import Path; from core.self_audit import run_package_self_audit; m=json.loads(Path('PIPELINE_MANIFEST.json').read_text(encoding='utf-8')); assert m['safety_policies']['never_auto_download_game']; assert m['safety_policies']['unreal_engine_required'] is False; assert Path('AGENT_START_HERE.md').is_file(); assert Path('SKILL.md').is_file(); r=run_package_self_audit(Path('.'), check_binary=True); assert r['status']=='PASS', r"
+      - name: Run Tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Build Release Archive & SHA256
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          $tag = $env:TAG_NAME -replace '^skill-',''
+          if ($tag -notmatch '^[A-Za-z0-9._-]+$') { throw "Unsafe tag name: $tag" }
+          Get-ChildItem -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+          Get-ChildItem -Recurse -File -Filter '*.pyc' -ErrorAction SilentlyContinue | Remove-Item -Force
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue output,sandbox_blender,runtime
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $zip = "dist/ww-auto-model-extractor-skill-$tag.zip"
+          Compress-Archive -Path AGENT_START_HERE.md,SKILL.md,PIPELINE_MANIFEST.json,orchestrator.py,requirements.txt,README.md,CHANGELOG.md,SECURITY.md,CONTRIBUTING.md,NOTICE.md,THIRD_PARTY_LICENSES.md,LICENSE,core,bin,bundled_addons,docs,tests -DestinationPath $zip -Force
+          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  " + (Split-Path $zip -Leaf) | Out-File "$zip.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-release
+          path: dist/*

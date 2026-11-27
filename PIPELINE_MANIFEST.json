@@ -1,0 +1,92 @@
+{
+  "manifest_version": "0.1.1",
+  "project_name": "ww-auto-model-extractor-skill",
+  "core_version": "0.1.1",
+  "handoff_schema_version": "0.1.0",
+  "description": "[非官方]《鸣潮》（Wuthering Waves）正式服已实装自机角色风格化贴图审计、隔离 Blender 沙盒卡通渲染与游戏内动作表情展示及标准化 UE 交接包管线（通用 Agent 包体 + 标准 SKILL.md 双形态，无需本机安装 Unreal Engine）。",
+  "entrypoint": "orchestrator.py",
+  "sop_document": "AGENT_START_HERE.md",
+  "skill_document": "SKILL.md",
+  "compliance_policy": {
+    "unofficial_non_affiliated": true,
+    "personal_study_and_research_only": true,
+    "no_commercial_use": true,
+    "no_private_trading_or_resale": true,
+    "no_public_asset_redistribution": true,
+    "no_beta_or_unreleased_leaks": true,
+    "no_process_injection_or_anticheat_bypass": true,
+    "ip_owner": "Kuro Games (广州库洛科技有限公司)",
+    "mit_applies_to_source_code_only": true,
+    "third_party_licenses_file": "THIRD_PARTY_LICENSES.md"
+  },
+  "safety_policies": {
+    "never_auto_download_game": true,
+    "missing_game_error_code": "FATAL_MISSING_WUTHERING_WAVES",
+    "require_host_consent_for_downloads": true,
+    "require_host_consent_for_fmodel_link": true,
+    "unreal_engine_required": false,
+    "never_mutate_host_blender_config": true,
+    "no_bundled_aes_keys": true,
+    "no_remote_aes_fetch": true,
+    "no_bundled_proprietary_oodle": true,
+    "no_bundled_game_assets": true
+  },
+  "bundled_environment": {
+    "native_helper": "bin/ww-extract/ww-extract.exe",
+    "open_source_native_decoders": [
+      "bin/ww-extract/CUE4Parse-Natives.dll",
+      "bin/ww-extract/native/zlib-ng2.dll",
+      "bin/ww-extract/native/Detex.dll"
+    ],
+    "blender_addons": [
+      "bundled_addons/io_scene_ueformat"
+    ],
+    "uses_blender_embedded_python": true
+  },
+  "self_audit": {
+    "command": "python orchestrator.py --self-audit",
+    "purpose": "Verifies AST integrity, manifest/SOP consistency, bundled open-source decoders (Zlib-ng/Detex/ACL), third-party GPL/Apache license notices, absence of proprietary DLLs, remote key URLs, leaked dev paths, or bundled AES keys."
+  },
+  "stages": [
+    {
+      "id": 0,
+      "name": "preflight_and_sandbox_gate",
+      "command": "python orchestrator.py --step 0",
+      "required_before_asking_character": true,
+      "verify_gate": "VerifyGate 0 (Self-Audit + Local WW Official Client Hard Gate + Local FModel Link & Key Check + Blender/Oodle Detection or Consent Bootstrap + Isolated Sandbox Smoke Test)",
+      "statuses": ["PASS", "PATCHED", "CONSENT_REQUIRED", "FAIL"],
+      "on_patched": "Display host_notice clearly to host user before continuing.",
+      "on_consent_required": "Pause immediately and present consent_actions to host user (e.g. ask host to provide local .json/.zip key package and consent to link FModel via --keys-file + --consent-link-fmodel, or consent to --consent-download blender,oodle).",
+      "on_missing_game": "Abort immediately without attempting to download Wuthering Waves."
+    },
+    {
+      "id": 1,
+      "name": "local_aes_check_and_character_parsing",
+      "command": "python orchestrator.py --step 1 --character \"<CHARACTER_NAME>\"",
+      "verify_gate": "VerifyGate 1 (Local-only AES mount check + pause if expired + .uemodel / MI JSON / Textures / .ueanim binary tracks & curves verification)",
+      "statuses": ["PASS", "WARN_PARTIAL", "CONSENT_REQUIRED", "FAIL"],
+      "on_consent_required": "Pause and ask host user to supply updated local .json/.zip key package and re-link FModel with --keys-file + --consent-link-fmodel."
+    },
+    {
+      "id": 2,
+      "name": "texture_three_tier_audit",
+      "command": "python orchestrator.py --step 2",
+      "verify_gate": "VerifyGate 3 (MI JSON -> Regex -> Pixel Stats via Blender Python OIIO/numpy; _N BC5+BC7 split; _SDF variance & mirror correlation; _D RGBA & alpha semantics; all-zero detection)",
+      "statuses": ["PASS", "FAIL"]
+    },
+    {
+      "id": 3,
+      "name": "blender_stylized_showcase_and_fbx_roundtrip",
+      "command": "python orchestrator.py --step 3",
+      "verify_gate": "VerifyGate 2 (Sandboxed Blender .uemodel import + Stylized Toon Shader + .ueanim + RibbonAnim merge + v10 Shape Key curves + cross-frame motion delta verification + non-blank preview renders + Rest-Pose FBX round-trip verification)",
+      "statuses": ["PASS", "FAIL"]
+    },
+    {
+      "id": 4,
+      "name": "handoff_packaging_and_delivery_report",
+      "command": "python orchestrator.py --step 4",
+      "verify_gate": "VerifyGate 4 (handoff_manifest.json v0.1.0 + DELIVERY_REPORT.md + optional ue_handoff_reference.py AST check + artifact checksums)",
+      "statuses": ["PASS", "FAIL"]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+# Runtime outputs, extracted game assets, caches, and isolated sandboxes (NEVER commit!)
+output/
+runtime/
+sandbox_blender/
+dist/
+*.tgz
+*.zip
+*.sha256
+
+# Python virtual environments, bytecode & caches
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# IDE & Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node / package manager artifacts
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Environment secrets, local keys, logs, backups & OS junk
+.env
+.env.*
+!.env.example
+*.log
+*keys_cache*.json
+AppSettings.json
+*.bak
+*.bak-*
+.DS_Store
+Thumbs.db

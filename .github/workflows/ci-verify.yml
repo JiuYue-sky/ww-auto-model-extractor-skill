@@ -1,0 +1,22 @@
+name: CI Verify (Agent Skill)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Package Self-Audit (including native binary)
+        run: python -c "from pathlib import Path; from core.self_audit import run_package_self_audit; r = run_package_self_audit(Path('.'), check_binary=True); print(r); assert r['status'] == 'PASS'"
+      - name: Run Unit & Contract Test Suite
+        run: python -m unittest discover -s tests -p "test_*.py" -v

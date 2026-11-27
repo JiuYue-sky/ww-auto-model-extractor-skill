@@ -1,0 +1,19 @@
+# Auto-detect text files and normalize line endings to LF in Git repository
+* text=auto eol=lf
+
+# Windows batch / PowerShell scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files (never diff or alter line endings)
+*.exe binary
+*.dll binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.blend binary
+*.fbx binary
+*.zip binary
+*.tgz binary

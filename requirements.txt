@@ -1,0 +1,5 @@
+# Optional Python dependencies ONLY if running without Blender's embedded Python.
+# By default, ww-auto-core automatically uses Blender's bundled Python (which already
+# ships with numpy, OpenImageIO, zstandard, and requests) — ZERO host pip install required!
+# Pillow>=10.0.0
+# numpy>=1.24.0
